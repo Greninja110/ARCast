@@ -5,14 +5,40 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Camera preview placeholder - will be implemented in Step 2 -->
+    <!-- Camera preview placeholder - we'll replace this with actual camera preview later -->
     <TextView
+        android:id="@+id/camera_placeholder_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Camera Preview will be here"
+        android:text="Camera Preview"
+        android:textSize="22sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Controls for camera will be added here -->
+    <LinearLayout
+        android:id="@+id/camera_controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="16dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <Button
+            android:id="@+id/btn_capture"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Capture"
+            android:layout_marginEnd="8dp"/>
+
+        <Button
+            android:id="@+id/btn_switch_camera"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Switch" />
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

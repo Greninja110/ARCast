@@ -1,46 +1,126 @@
-// File: MainActivity.kt
-package com.example.arcamerastreamer
+package com.abhijeetsahoo.arcast
 
 import android.os.Bundle
-import androidx.activity.viewModels
+import android.util.Log
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.navigation.NavController
-import androidx.navigation.fragment.NavHostFragment
-import androidx.navigation.ui.setupWithNavController
-import com.example.arcamerastreamer.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
-
-    private lateinit var binding: ActivityMainBinding
-    private lateinit var navController: NavController
-    private val viewModel: MainViewModel by viewModels()
+    companion object {
+        private const val TAG = "MainActivity"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        try {
+            // Check if we should use the super simple layout
+            val useSimpleLayout = intent.getBooleanExtra("USE_SIMPLE_LAYOUT", false)
 
-        // Set up Navigation
-        val navHostFragment = supportFragmentManager
-            .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
-        navController = navHostFragment.navController
+            if (useSimpleLayout) {
+                // Create a super simple layout programmatically to avoid XML parsing issues
+                createSimpleLayout()
+            } else {
+                // Try to use the XML layout
+                setContentView(R.layout.activity_main)
 
-        // Set up bottom navigation with NavController
-        binding.bottomNavigation.setupWithNavController(navController)
+                // We won't do any view binding or complex navigation here
+                // Just show a message that it worked
+                Toast.makeText(this, "XML layout loaded successfully!", Toast.LENGTH_SHORT).show()
+            }
 
-        // Observe ViewModel state
-        observeViewModel()
-    }
-
-    private fun observeViewModel() {
-        // Observe LiveData from ViewModel here
-        viewModel.appState.observe(this) { state ->
-            // Update UI based on state
+        } catch (e: Exception) {
+            // If there's still an error, fall back to absolute simplest layout
+            Log.e(TAG, "Error in onCreate, falling back to emergency layout", e)
+            createEmergencyLayout(e.message ?: "Unknown error")
         }
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        return navController.navigateUp() || super.onSupportNavigateUp()
+    private fun createSimpleLayout() {
+        // Create a very simple layout programmatically
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 16, 16, 16)
+        }
+
+        // Add a title
+        layout.addView(TextView(this).apply {
+            text = "ARCast Simple Mode"
+            textSize = 24f
+            setPadding(0, 0, 0, 24)
+        })
+
+        // Add an explanation
+        layout.addView(TextView(this).apply {
+            text = "This is a simplified version of the app to troubleshoot XML layout issues."
+            textSize = 16f
+            setPadding(0, 0, 0, 24)
+        })
+
+        // Add a camera button
+        layout.addView(Button(this).apply {
+            text = "Camera Tab"
+            setOnClickListener {
+                Toast.makeText(applicationContext, "Camera functionality will be implemented here", Toast.LENGTH_SHORT).show()
+            }
+            setPadding(0, 16, 0, 16)
+        })
+
+        // Add a streaming button
+        layout.addView(Button(this).apply {
+            text = "Streaming Tab"
+            setOnClickListener {
+                Toast.makeText(applicationContext, "Streaming functionality will be implemented here", Toast.LENGTH_SHORT).show()
+            }
+            setPadding(0, 16, 0, 16)
+        })
+
+        // Add a settings button
+        layout.addView(Button(this).apply {
+            text = "Settings Tab"
+            setOnClickListener {
+                Toast.makeText(applicationContext, "Settings functionality will be implemented here", Toast.LENGTH_SHORT).show()
+            }
+            setPadding(0, 16, 0, 16)
+        })
+
+        // Set the content view
+        setContentView(layout)
+    }
+
+    private fun createEmergencyLayout(errorMessage: String) {
+        // Create absolute minimal layout for emergency situations
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16, 16, 16, 16)
+        }
+
+        // Add error info
+        layout.addView(TextView(this).apply {
+            text = "EMERGENCY MODE"
+            textSize = 24f
+            setTextColor(getColor(android.R.color.holo_red_dark))
+            setPadding(0, 0, 0, 16)
+        })
+
+        layout.addView(TextView(this).apply {
+            text = "Error loading app: $errorMessage"
+            textSize = 16f
+            setPadding(0, 0, 0, 24)
+        })
+
+        // Add a return button
+        layout.addView(Button(this).apply {
+            text = "Return to Debug Mode"
+            setOnClickListener {
+                finish()
+            }
+        })
+
+        // Set the content view
+        setContentView(layout)
     }
 }

@@ -1,4 +1,4 @@
-package com.example.arcamerastreamer
+package com.abhijeetsahoo.arcast
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
