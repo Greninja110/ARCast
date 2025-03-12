@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_switch_camera"
+        android:icon="@android:drawable/ic_popup_sync"
+        android:title="Switch Camera"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_flash_mode"
+        android:icon="@android:drawable/ic_menu_gallery"
+        android:title="Flash Mode"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/action_flash_auto"
+                android:title="Auto" />
+            <item
+                android:id="@+id/action_flash_on"
+                android:title="On" />
+            <item
+                android:id="@+id/action_flash_off"
+                android:title="Off" />
+        </menu>
+    </item>
+
+    <item
+        android:id="@+id/action_hdr_toggle"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:title="HDR"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_camera_settings"
+        android:icon="@android:drawable/ic_menu_preferences"
+        android:title="Camera Settings"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_start_streaming"
+        android:title="Start Streaming"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_ar_mode"
+        android:title="AR Mode"
+        app:showAsAction="never" />
+</menu>

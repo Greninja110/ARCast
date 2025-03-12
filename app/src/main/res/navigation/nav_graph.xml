@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/cameraFragment">
+
+    <fragment
+        android:id="@+id/cameraFragment"
+        android:name="com.example.arcamerastreamer.camera.CameraFragment"
+        android:label="Camera"
+        tools:layout="@layout/fragment_camera">
+        <action
+            android:id="@+id/action_to_settings"
+            app:destination="@id/settingsFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.example.arcamerastreamer.settings.SettingsFragment"
+        android:label="Settings"
+        tools:layout="@layout/fragment_settings" />
+
+    <fragment
+        android:id="@+id/streamInfoFragment"
+        android:name="com.example.arcamerastreamer.streaming.StreamInfoFragment"
+        android:label="Stream Info"
+        tools:layout="@layout/fragment_stream_info" />
+
+</navigation>
