@@ -15,6 +15,7 @@ import android.util.Size
 import androidx.camera.core.ImageAnalysis
 import androidx.core.app.NotificationCompat
 import com.abhijeetsahoo.arcast.MainActivity
+import com.abhijeetsahoo.arcast.R
 import com.abhijeetsahoo.arcast.utils.ErrorHandler
 import com.abhijeetsahoo.arcast.utils.Logger
 import com.abhijeetsahoo.arcast.utils.NetworkUtils
@@ -35,12 +36,24 @@ class StreamingService : Service() {
         const val ACTION_START_STREAMING = "com.abhijeetsahoo.arcast.START_STREAMING"
         const val ACTION_STOP_STREAMING = "com.abhijeetsahoo.arcast.STOP_STREAMING"
         const val ACTION_UPDATE_QUALITY = "com.abhijeetsahoo.arcast.UPDATE_QUALITY"
+        const val ACTION_CHECK_STATUS = "com.abhijeetsahoo.arcast.CHECK_STATUS"
+
+        // Broadcast actions
+        const val BROADCAST_STREAMING_STARTED = "com.abhijeetsahoo.arcast.STREAMING_STARTED"
+        const val BROADCAST_STREAMING_STOPPED = "com.abhijeetsahoo.arcast.STREAMING_STOPPED"
+        const val BROADCAST_STREAMING_ERROR = "com.abhijeetsahoo.arcast.STREAMING_ERROR"
+        const val BROADCAST_URL_UPDATED = "com.abhijeetsahoo.arcast.URL_UPDATED"
+        const val BROADCAST_CLIENTS_CHANGED = "com.abhijeetsahoo.arcast.CLIENTS_CHANGED"
 
         // Extras
         const val EXTRA_PORT = "port"
         const val EXTRA_QUALITY = "quality"
         const val EXTRA_MODE = "mode"
         const val EXTRA_PROTOCOL = "protocol"
+        const val EXTRA_URL = "url"
+        const val EXTRA_IP_ADDRESS = "ip_address"
+        const val EXTRA_ERROR_MESSAGE = "error_message"
+        const val EXTRA_CLIENT_COUNT = "client_count"
 
         // Default values
         private const val DEFAULT_PORT = 8080
@@ -49,19 +62,14 @@ class StreamingService : Service() {
         // Events
         private val clientCount = AtomicInteger(0)
 
-        // Callbacks
-        private var onClientConnectedListener: ((Int) -> Unit)? = null
-        private var onClientDisconnectedListener: ((Int) -> Unit)? = null
+        // Status tracking
+        private var isServiceRunning = false
 
-        fun setOnClientConnectedListener(listener: (Int) -> Unit) {
-            onClientConnectedListener = listener
+        fun isRunning(): Boolean {
+            return isServiceRunning
         }
 
-        fun setOnClientDisconnectedListener(listener: (Int) -> Unit) {
-            onClientDisconnectedListener = listener
-        }
-
-        fun getConnectedClients(): Int {
+        fun getClientCount(): Int {
             return clientCount.get()
         }
     }
@@ -78,6 +86,8 @@ class StreamingService : Service() {
     private var streamingMode = StreamingMode.VIDEO_ONLY
     private var streamQuality = StreamQuality.MEDIUM
     private var streamProtocol = StreamProtocol.HTTP
+    private var streamUrl: String? = null
+    private var ipAddress: String? = null
 
     // Notification Manager
     private lateinit var notificationManager: NotificationManager
@@ -123,6 +133,10 @@ class StreamingService : Service() {
                     }
                     updateQuality(quality)
                 }
+                ACTION_CHECK_STATUS -> {
+                    // Broadcast current status
+                    broadcastStatus()
+                }
                 else -> {
                     // Default case for when expression to be exhaustive
                     Log.d(TAG, "Unknown action: ${intent?.action}")
@@ -130,6 +144,7 @@ class StreamingService : Service() {
             }
         } catch (e: Exception) {
             ErrorHandler.handleException(applicationContext, TAG, "Error in onStartCommand", e)
+            broadcastError(e.message ?: "Unknown error")
         }
 
         return START_NOT_STICKY
@@ -143,6 +158,7 @@ class StreamingService : Service() {
         super.onDestroy()
         stopStreaming()
         cameraExecutor.shutdown()
+        isServiceRunning = false
         Logger.i(TAG, "StreamingService destroyed")
     }
 
@@ -154,6 +170,22 @@ class StreamingService : Service() {
         this.quality = quality
         this.streamingMode = mode
         this.streamProtocol = protocol
+
+        // Get the IP address first
+        ipAddress = NetworkUtils.getWifiIPAddress(applicationContext)
+        if (ipAddress == null || ipAddress == "127.0.0.1") {
+            broadcastError("Couldn't determine device IP address. Make sure WiFi is connected.")
+            stopSelf()
+            return
+        }
+
+        // Calculate the stream URL based on mode
+        streamUrl = when (mode) {
+            StreamingMode.IMAGE_ONLY -> "http://$ipAddress:$port/image"
+            StreamingMode.AUDIO_ONLY -> "http://$ipAddress:$port/audio"
+            StreamingMode.VIDEO_ONLY -> "http://$ipAddress:$port/video"
+            StreamingMode.VIDEO_AUDIO -> "http://$ipAddress:$port/stream"
+        }
 
         // Start as a foreground service with notification
         val notification = createNotification()
@@ -181,18 +213,14 @@ class StreamingService : Service() {
             }
 
             Logger.i(TAG, "Streaming server started on port $port with mode $streamingMode and protocol $streamProtocol")
+            isServiceRunning = true
 
             // Broadcast that streaming has started
-            val broadcastIntent = Intent("com.abhijeetsahoo.arcast.STREAMING_STARTED").apply {
-                putExtra("port", port)
-                putExtra("url", getStreamUrl())
-                putExtra("mode", streamingMode.name)
-                putExtra("protocol", streamProtocol.name)
-            }
-            sendBroadcast(broadcastIntent)
+            broadcastStreamingStarted()
 
         } catch (e: Exception) {
             ErrorHandler.handleException(applicationContext, TAG, "Failed to start streaming server", e)
+            broadcastError("Failed to start streaming: ${e.message}")
             stopSelf()
         }
     }
@@ -207,13 +235,13 @@ class StreamingService : Service() {
             setOnClientConnectedListener { count ->
                 clientCount.set(count)
                 updateNotification()
-                onClientConnectedListener?.invoke(count)
+                broadcastClientCountChanged(count)
             }
 
             setOnClientDisconnectedListener { count ->
                 clientCount.set(count)
                 updateNotification()
-                onClientDisconnectedListener?.invoke(count)
+                broadcastClientCountChanged(count)
             }
 
             // Start server
@@ -235,6 +263,12 @@ class StreamingService : Service() {
             }
             setJpegQuality(jpegQuality)
 
+            // Set client connection listener
+            setOnClientCountChangedListener { count ->
+                updateNotification()
+                broadcastClientCountChanged(count)
+            }
+
             // Start the streamer
             start(port)
         }
@@ -247,6 +281,13 @@ class StreamingService : Service() {
         audioStreamer = AudioStreamer(applicationContext).apply {
             // Start the streamer with non-null quality
             val quality = getQualityFromInt(quality) ?: StreamQuality.MEDIUM
+
+            // Set client connection listener
+            setOnClientCountChangedListener { count ->
+                updateNotification()
+                broadcastClientCountChanged(count)
+            }
+
             start(port, quality)
         }
     }
@@ -267,14 +308,15 @@ class StreamingService : Service() {
             httpServer = null
 
             clientCount.set(0)
+            isServiceRunning = false
 
             // Broadcast that streaming has stopped
-            val broadcastIntent = Intent("com.abhijeetsahoo.arcast.STREAMING_STOPPED")
-            sendBroadcast(broadcastIntent)
+            broadcastStreamingStopped()
 
             Logger.i(TAG, "Streaming server stopped")
         } catch (e: Exception) {
             ErrorHandler.handleException(applicationContext, TAG, "Failed to stop streaming server", e)
+            broadcastError("Error stopping streaming: ${e.message}")
         }
     }
 
@@ -287,6 +329,12 @@ class StreamingService : Service() {
 
         // Update quality in active streamers
         mjpegStreamer?.setJpegQuality(quality)
+
+        // Update notification with new quality
+        updateNotification()
+
+        // Broadcast quality change
+        broadcastStatus()
     }
 
     /**
@@ -302,6 +350,9 @@ class StreamingService : Service() {
         // Here you'd reconfigure the streaming server based on the new mode
         // For now, we just update the notification
         updateNotification()
+
+        // Broadcast mode change
+        broadcastStatus()
     }
 
     /**
@@ -312,23 +363,67 @@ class StreamingService : Service() {
         // Would need to stop and restart the server
         this.streamProtocol = protocol
         Logger.i(TAG, "Streaming protocol updated to $protocol")
+
+        // Broadcast protocol change
+        broadcastStatus()
     }
 
     /**
-     * Get the stream URL
+     * Broadcast that streaming has started
      */
-    private fun getStreamUrl(): String? {
-        val ipAddress = NetworkUtils.getWifiIPAddress(applicationContext)
-        if (ipAddress != null) {
-            val basePath = when (streamingMode) {
-                StreamingMode.IMAGE_ONLY -> "image"
-                StreamingMode.AUDIO_ONLY -> "audio"
-                StreamingMode.VIDEO_ONLY -> "video"
-                StreamingMode.VIDEO_AUDIO -> "stream"
-            }
-            return "http://$ipAddress:$port/$basePath"
+    private fun broadcastStreamingStarted() {
+        val intent = Intent(BROADCAST_STREAMING_STARTED).apply {
+            putExtra(EXTRA_PORT, port)
+            putExtra(EXTRA_URL, streamUrl)
+            putExtra(EXTRA_IP_ADDRESS, ipAddress)
+            putExtra(EXTRA_MODE, streamingMode.toString())
+            putExtra(EXTRA_QUALITY, quality)
+            putExtra(EXTRA_PROTOCOL, streamProtocol.toString())
         }
-        return null
+        sendBroadcast(intent)
+    }
+
+    /**
+     * Broadcast that streaming has stopped
+     */
+    private fun broadcastStreamingStopped() {
+        val intent = Intent(BROADCAST_STREAMING_STOPPED)
+        sendBroadcast(intent)
+    }
+
+    /**
+     * Broadcast error message
+     */
+    private fun broadcastError(errorMessage: String) {
+        val intent = Intent(BROADCAST_STREAMING_ERROR).apply {
+            putExtra(EXTRA_ERROR_MESSAGE, errorMessage)
+        }
+        sendBroadcast(intent)
+    }
+
+    /**
+     * Broadcast current status
+     */
+    private fun broadcastStatus() {
+        val intent = Intent(BROADCAST_URL_UPDATED).apply {
+            putExtra(EXTRA_URL, streamUrl)
+            putExtra(EXTRA_IP_ADDRESS, ipAddress)
+            putExtra(EXTRA_MODE, streamingMode.toString())
+            putExtra(EXTRA_QUALITY, quality)
+            putExtra(EXTRA_PROTOCOL, streamProtocol.toString())
+            putExtra(EXTRA_CLIENT_COUNT, clientCount.get())
+        }
+        sendBroadcast(intent)
+    }
+
+    /**
+     * Broadcast client count changed
+     */
+    private fun broadcastClientCountChanged(count: Int) {
+        val intent = Intent(BROADCAST_CLIENTS_CHANGED).apply {
+            putExtra(EXTRA_CLIENT_COUNT, count)
+        }
+        sendBroadcast(intent)
     }
 
     /**
@@ -407,7 +502,7 @@ class StreamingService : Service() {
         }
 
         // Stream URL text
-        val streamUrl = getStreamUrl() ?: "URL not available"
+        val streamUrlText = streamUrl ?: "URL not available"
 
         // Mode text
         val modeText = when (streamingMode) {
@@ -429,7 +524,7 @@ class StreamingService : Service() {
             .setContentText("$modeText ($qualityText) - $clientCountText")
             .setStyle(NotificationCompat.BigTextStyle()
                 .setBigContentTitle("ARCast Streaming")
-                .bigText("Mode: $modeText\nQuality: $qualityText\nProtocol: $protocolText\n$clientCountText\nURL: $streamUrl"))
+                .bigText("Mode: $modeText\nQuality: $qualityText\nProtocol: $protocolText\n$clientCountText\nURL: $streamUrlText"))
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(pendingIntent)

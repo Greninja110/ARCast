@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.abhijeetsahoo.arcast"
-    compileSdk = 33
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.abhijeetsahoo.arcast"
@@ -38,7 +38,8 @@ android {
 
     buildFeatures {
         viewBinding = true
-
+        // Make sure dataBinding is set appropriately (if you're using it)
+//        dataBinding = false
 
     }
 }
@@ -103,4 +104,6 @@ dependencies {
     // LiveData and ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1")
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.1")
+
+    implementation("com.google.android.material:material:1.10.0")
 }

@@ -152,6 +152,15 @@
                     android:text="Copy URL"
                     android:enabled="false"
                     app:icon="@android:drawable/ic_menu_share" />
+
+                <Button
+                    android:id="@+id/button_toggle_flash"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="TOGGLE FLASH"
+                    android:drawableStart="@drawable/ic_toggle_flash"
+                    android:layout_marginStart="8dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
