@@ -368,12 +368,14 @@ class StreamFragment : Fragment() {
                     videoLayout?.visibility = View.VISIBLE
                 }
                 StreamingMode.VIDEO_AUDIO -> {
-                    fullStreamLayout?.visibility = View.VISIBLE ?: run {
+                    if (fullStreamLayout != null) {
+                        fullStreamLayout!!.visibility = View.VISIBLE
+                    } else {
                         // Fallback to video layout if full stream layout is not available
                         videoLayout?.visibility = View.VISIBLE
                     }
                 }
-            }
+            } // Removed an extra closing brace that was here
 
             // Show QR code if streaming
             qrCodeCard?.visibility = if (isStreaming) View.VISIBLE else View.GONE
