@@ -4,6 +4,10 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
+import com.abhijeetsahoo.arcast.camera.CameraFragment
+import com.abhijeetsahoo.arcast.settings.SettingsFragment
+import com.abhijeetsahoo.arcast.streaming.StreamFragment
+import com.abhijeetsahoo.arcast.utils.ErrorHandler
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class MainActivity : AppCompatActivity() {
@@ -46,13 +50,17 @@ class MainActivity : AppCompatActivity() {
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error in onCreate: ${e.message}", e)
+            ErrorHandler.handleException(this, TAG, "Error in onCreate", e)
         }
     }
 
     private fun loadFragment(fragment: Fragment) {
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fragment_container, fragment)
-            .commit()
+        try {
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragment_container, fragment)
+                .commit()
+        } catch (e: Exception) {
+            ErrorHandler.handleException(this, TAG, "Error loading fragment", e)
+        }
     }
 }
