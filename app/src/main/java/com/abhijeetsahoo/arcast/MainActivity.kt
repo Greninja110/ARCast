@@ -26,7 +26,7 @@ class MainActivity : AppCompatActivity() {
         applyTheme()
 
         try {
-            setContentView(R.layout.activity_main)
+            setContentView(R.layout.activity_main_temp)
 
             // Set up Navigation
             val navHostFragment = supportFragmentManager
