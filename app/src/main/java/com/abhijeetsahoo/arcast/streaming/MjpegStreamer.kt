@@ -2,231 +2,179 @@ package com.abhijeetsahoo.arcast.streaming
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
-import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
-import androidx.camera.core.ImageAnalysis
+import android.media.Image
+import android.util.Log
 import androidx.camera.core.ImageProxy
-import com.abhijeetsahoo.arcast.utils.ErrorHandler
-import com.abhijeetsahoo.arcast.utils.Logger
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * Processor for camera frames that converts them to MJPEG format for streaming
+ * Class for handling MJPEG streaming of camera frames
  */
-class MjpegStreamer(private val context: Context) : ImageAnalysis.Analyzer {
-
+class MjpegStreamer(private val context: Context) {
     companion object {
         private const val TAG = "MjpegStreamer"
-        private const val DEFAULT_JPEG_QUALITY = 80
     }
 
-    // HTTP server for streaming
+    // Reference to the HTTP server
     private var httpServer: HttpServer? = null
 
-    // Stream processing settings
-    private var jpegQuality = DEFAULT_JPEG_QUALITY
-    private var isRunning = false
-    private var frameSkip = 0
-    private var frameCount = 0
+    // Background thread for processing
+    private val executor = Executors.newSingleThreadExecutor()
 
-    // Executor for background processing
-    private val processingExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-
-    // Client connection callbacks
-    private var onClientCountChanged: ((Int) -> Unit)? = null
+    // Stream quality/settings
+    private var quality = StreamQuality.MEDIUM
 
     /**
-     * Start the MJPEG streamer
+     * Initialize and start the HTTP server
+     *
+     * @param port Port to run the server on
+     * @return True if started successfully
      */
-    fun start(port: Int = 8080) {
-        if (!isRunning) {
-            try {
-                httpServer = HttpServer(context, port).apply {
-                    // Set up client callbacks
-                    setOnClientConnectedListener { count ->
-                        Logger.i(TAG, "Client connected. Total: $count")
-                        onClientCountChanged?.invoke(count)
-                    }
+    fun start(port: Int): Boolean {
+        if (httpServer != null) {
+            Log.w(TAG, "Server already running")
+            return false
+        }
 
-                    setOnClientDisconnectedListener { count ->
-                        Logger.i(TAG, "Client disconnected. Total: $count")
-                        onClientCountChanged?.invoke(count)
-                    }
+        return try {
+            // Create and start HTTP server
+            httpServer = HttpServer(context, port)
+            httpServer?.start()
 
-                    // Start the server
-                    start()
-                }
-
-                isRunning = true
-                Logger.i(TAG, "MJPEG Streamer started on port $port")
-            } catch (e: Exception) {
-                ErrorHandler.handleException(context, TAG, "Failed to start streamer", e)
-            }
+            Log.i(TAG, "MJPEG streamer started on port $port")
+            true
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to start HTTP server", e)
+            false
         }
     }
 
     /**
-     * Stop the MJPEG streamer
+     * Stop the HTTP server
      */
     fun stop() {
-        if (isRunning) {
+        httpServer?.let {
+            it.stop()
+            httpServer = null
+            Log.i(TAG, "MJPEG streamer stopped")
+        }
+    }
+
+    /**
+     * Configure streaming quality
+     */
+    fun configureQuality(streamQuality: StreamQuality) {
+        this.quality = streamQuality
+        Log.d(TAG, "Stream quality set to: $streamQuality")
+    }
+
+    /**
+     * Start streaming with specified mode
+     */
+    fun startStreaming(mode: StreamingMode, protocol: StreamProtocol) {
+        httpServer?.startStreaming(mode, quality, protocol)
+    }
+
+    /**
+     * Stop streaming
+     */
+    fun stopStreaming() {
+        httpServer?.stopStreaming()
+    }
+
+    /**
+     * Process a new camera frame
+     */
+    fun processFrame(imageProxy: ImageProxy) {
+        executor.execute {
             try {
-                httpServer?.stop()
-                httpServer = null
-                isRunning = false
-                Logger.i(TAG, "MJPEG Streamer stopped")
+                val format = imageProxy.format
+                val image = imageProxy.image
+
+                if (image != null && (format == ImageFormat.YUV_420_888 || format == ImageFormat.YUV_422_888 || format == ImageFormat.YUV_444_888)) {
+                    // Convert to NV21 format which is supported by YuvImage
+                    val nv21 = yuv420ToNv21(image, imageProxy.width, imageProxy.height)
+
+                    // Send to HTTP server for streaming
+                    httpServer?.updateFrame(nv21, imageProxy.width, imageProxy.height, ImageFormat.NV21)
+                }
             } catch (e: Exception) {
-                ErrorHandler.handleException(context, TAG, "Failed to stop streamer", e)
+                Log.e(TAG, "Error processing frame", e)
+            } finally {
+                imageProxy.close()
             }
         }
     }
 
     /**
-     * Set JPEG quality (1-100)
+     * Convert YUV_420_888 to NV21 format
      */
-    fun setJpegQuality(quality: Int) {
-        jpegQuality = quality.coerceIn(1, 100)
-    }
+    private fun yuv420ToNv21(image: Image, width: Int, height: Int): ByteArray {
+        val ySize = width * height
+        val uvSize = width * height / 4
 
-    /**
-     * Set frame skip value (0 = process every frame, 1 = skip every other frame, etc.)
-     */
-    fun setFrameSkip(skip: Int) {
-        frameSkip = skip.coerceAtLeast(0)
-    }
+        val nv21 = ByteArray(ySize + uvSize * 2)
 
-    /**
-     * Set callback for client count changes
-     */
-    fun setOnClientCountChangedListener(listener: (Int) -> Unit) {
-        onClientCountChanged = listener
+        // Get planes
+        val yPlane = image.planes[0]
+        val uPlane = image.planes[1]
+        val vPlane = image.planes[2]
 
-        // Immediately invoke with current count
-        httpServer?.let { server ->
-            listener.invoke(server.getConnectedClientCount())
+        val yBuffer = yPlane.buffer
+        val uBuffer = uPlane.buffer
+        val vBuffer = vPlane.buffer
+
+        val yRowStride = yPlane.rowStride
+        val uRowStride = uPlane.rowStride
+        val vRowStride = vPlane.rowStride
+
+        val yPixelStride = yPlane.pixelStride
+        val uPixelStride = uPlane.pixelStride
+        val vPixelStride = vPlane.pixelStride
+
+        var yPos = 0
+        var uvPos = ySize
+
+        // Copy Y plane data
+        for (i in 0 until height) {
+            val yBufferPos = i * yRowStride
+
+            for (j in 0 until width) {
+                nv21[yPos++] = yBuffer[yBufferPos + j * yPixelStride]
+            }
         }
+
+        // Copy UV data
+        for (i in 0 until height / 2) {
+            val uBufferPos = i * uRowStride
+            val vBufferPos = i * vRowStride
+
+            for (j in 0 until width / 2) {
+                nv21[uvPos++] = vBuffer[vBufferPos + j * vPixelStride]
+                nv21[uvPos++] = uBuffer[uBufferPos + j * uPixelStride]
+            }
+        }
+
+        return nv21
     }
 
     /**
-     * Get the current number of connected clients
+     * Get number of connected clients
      */
     fun getConnectedClientCount(): Int {
-        return httpServer?.getConnectedClientCount() ?: 0
+        return httpServer?.getConnectedClientsCount() ?: 0
     }
 
     /**
-     * Process a frame from the camera
+     * Check if streaming is active
      */
-    override fun analyze(image: ImageProxy) {
-        try {
-            if (isRunning) {
-                // Apply frame skipping if configured
-                if (frameSkip > 0) {
-                    if (frameCount % (frameSkip + 1) != 0) {
-                        frameCount++
-                        image.close()
-                        return
-                    }
-                }
-                frameCount++
-
-                // Process the image in a background thread to avoid blocking camera
-                processingExecutor.execute {
-                    try {
-                        // Convert image to JPEG bytes
-                        val jpegBytes = imageToJpegBytes(image)
-
-                        // Update the current frame in the HTTP server
-                        httpServer?.updateFrame(jpegBytes)
-                    } catch (e: Exception) {
-                        ErrorHandler.handleException(context, TAG, "Failed to process image", e)
-                    } finally {
-                        // Make sure we close the image
-                        image.close()
-                    }
-                }
-            } else {
-                // Just close the image if we're not processing
-                image.close()
-            }
-        } catch (e: Exception) {
-            ErrorHandler.handleException(context, TAG, "Error in image analyzer", e)
-            image.close()
-        }
-    }
-
-    /**
-     * Convert an ImageProxy to JPEG bytes
-     */
-    private fun imageToJpegBytes(image: ImageProxy): ByteArray {
-        // Get the YUV image
-        val yBuffer = image.planes[0].buffer
-        val uBuffer = image.planes[1].buffer
-        val vBuffer = image.planes[2].buffer
-
-        val ySize = yBuffer.remaining()
-        val uSize = uBuffer.remaining()
-        val vSize = vBuffer.remaining()
-
-        val nv21 = ByteArray(ySize + uSize + vSize)
-
-        // U and V are swapped
-        yBuffer.get(nv21, 0, ySize)
-        vBuffer.get(nv21, ySize, vSize)
-        uBuffer.get(nv21, ySize + vSize, uSize)
-
-        // Convert to Jpeg
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), jpegQuality, out)
-
-        // Rotate the image if needed
-        val jpegBytes = out.toByteArray()
-        return if (image.imageInfo.rotationDegrees != 0) {
-            rotateJpegBytes(jpegBytes, image.imageInfo.rotationDegrees)
-        } else {
-            jpegBytes
-        }
-    }
-
-    /**
-     * Rotate a JPEG image by specified degrees
-     */
-    private fun rotateJpegBytes(jpegBytes: ByteArray, rotationDegrees: Int): ByteArray {
-        // Decode the JPEG
-        val bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
-
-        // Create a matrix for rotation
-        val matrix = Matrix()
-        matrix.postRotate(rotationDegrees.toFloat())
-
-        // Create a rotated bitmap
-        val rotatedBitmap = Bitmap.createBitmap(
-            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
-        )
-
-        // Convert back to JPEG
-        val out = ByteArrayOutputStream()
-        rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out)
-
-        // Clean up
-        bitmap.recycle()
-        rotatedBitmap.recycle()
-
-        return out.toByteArray()
-    }
-
-    /**
-     * Release all resources
-     */
-    fun release() {
-        stop()
-        processingExecutor.shutdown()
+    fun isStreaming(): Boolean {
+        return httpServer?.isStreaming() ?: false
     }
 }

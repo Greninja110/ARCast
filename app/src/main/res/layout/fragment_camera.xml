@@ -5,40 +5,52 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Camera preview placeholder - we'll replace this with actual camera preview later -->
-    <TextView
-        android:id="@+id/camera_placeholder_text"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Camera Preview"
-        android:textSize="22sp"
+    <!-- Camera Preview -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/preview_view"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Controls for camera will be added here -->
-    <LinearLayout
-        android:id="@+id/camera_controls"
-        android:layout_width="match_parent"
+    <!-- Camera Info Banner -->
+    <TextView
+        android:id="@+id/text_camera_info"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:padding="16dp"
-        app:layout_constraintBottom_toBottomOf="parent">
+        android:background="#77000000"
+        android:padding="8dp"
+        android:text="Camera: Back"
+        android:textColor="@android:color/white"
+        android:layout_margin="16dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <Button
-            android:id="@+id/btn_capture"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Capture"
-            android:layout_marginEnd="8dp"/>
+    <!-- Switch Camera FAB -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/btn_switch_camera"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:contentDescription="Switch Camera"
+        android:src="@drawable/ic_switch_camera"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <Button
-            android:id="@+id/btn_switch_camera"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Switch" />
-    </LinearLayout>
+    <!-- Switch to Mode Button -->
+    <Button
+        android:id="@+id/btn_switch_to_mode"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="32dp"
+        android:text="Go to Streaming Mode"
+        android:padding="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
