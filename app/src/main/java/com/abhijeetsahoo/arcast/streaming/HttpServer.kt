@@ -3,473 +3,652 @@ package com.abhijeetsahoo.arcast.streaming
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.util.Log
+import com.abhijeetsahoo.arcast.R
+import com.abhijeetsahoo.arcast.utils.ErrorHandler
+import com.abhijeetsahoo.arcast.utils.Logger
 import fi.iki.elonen.NanoHTTPD
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.io.IOException
 import java.io.InputStream
-import java.io.OutputStream
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /**
- * HTTP Server for streaming camera and audio data
+ * HTTP Server implementation for streaming camera content
  */
-class HttpServer(
-    private val context: Context,
-    port: Int
-) : NanoHTTPD(port) {
+class HttpServer(private val context: Context, port: Int = 8080) : NanoHTTPD(port) {
 
     companion object {
         private const val TAG = "HttpServer"
-        private const val MIME_MJPEG = "multipart/x-mixed-replace; boundary=--frame"
+        private const val MJPEG_BOUNDARY = "ARCastBoundary"
+        private const val AUDIO_BOUNDARY = "ARCastAudioBoundary"
+
+        // MIME types
         private const val MIME_JPEG = "image/jpeg"
+        private const val MIME_MJPEG = "multipart/x-mixed-replace;boundary=$MJPEG_BOUNDARY"
+        private const val MIME_PLAINTEXT = "text/plain"
         private const val MIME_HTML = "text/html"
+        private const val MIME_JSON = "application/json"
+        private const val MIME_AUDIO_STREAM = "multipart/x-mixed-replace;boundary=$AUDIO_BOUNDARY"
+        private const val MIME_AUDIO_PCM = "audio/pcm"
     }
 
-    // Track connected clients for statistics
+    // Current frames and data being streamed
+    @Volatile
+    private var currentFrame = AtomicReference<ByteArray>()
+
+    @Volatile
+    private var currentAudioData = AtomicReference<ByteArray>()
+
+    // Counter for connected clients
     private val connectedClients = AtomicInteger(0)
 
-    // Latest frame for snapshot
-    @Volatile
-    private var latestFrame: ByteArray? = null
-
-    // Queues for each client to handle streaming
-    private val clientQueues = ConcurrentHashMap<String, LinkedBlockingQueue<ByteArray>>()
-
-    // Track if server is streaming
-    private val isStreaming = AtomicBoolean(false)
-
-    // Flag to control streaming
-    private val streamingEnabled = AtomicBoolean(false)
+    // Callbacks for client connection events
+    private var onClientConnected: ((Int) -> Unit)? = null
+    private var onClientDisconnected: ((Int) -> Unit)? = null
 
     // Current streaming mode
     private var streamingMode = StreamingMode.VIDEO_ONLY
 
-    // Streaming quality
-    private var streamQuality = StreamQuality.MEDIUM
-
-    // Protocol settings
-    private var streamProtocol = StreamProtocol.HTTP
-
-    /**
-     * Initialize server
-     */
+    // Start with a default "waiting" image
     init {
-        Log.i(TAG, "Starting HTTP server on port $port")
+        try {
+            // Load a default image from resources
+            val defaultBitmap = BitmapFactory.decodeResource(context.resources, R.drawable.ic_camera)
+            val outputStream = ByteArrayOutputStream()
+            defaultBitmap?.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+            currentFrame.set(outputStream.toByteArray())
+
+            // Initialize audio data with empty array
+            currentAudioData.set(ByteArray(0))
+
+            Logger.i(TAG, "HTTP Server initialized with default image")
+        } catch (e: Exception) {
+            ErrorHandler.handleException(context, TAG, "Failed to initialize default image", e)
+        }
     }
 
     /**
-     * Handle incoming HTTP requests
+     * Set the current streaming mode
      */
-    override fun serve(session: IHTTPSession): Response {
-        val uri = session.uri
-        Log.d(TAG, "Received request: $uri from ${session.remoteHostName}")
+    fun setStreamingMode(mode: StreamingMode) {
+        this.streamingMode = mode
+        Logger.i(TAG, "Streaming mode set to: $mode")
+    }
 
-        // Handle request based on URI
-        return when {
-            uri.equals("/") -> serveIndexPage(session)
-            uri.equals("/image") -> serveImageSnapshot(session)
-            uri.equals("/video") -> serveVideoStream(session)
-            uri.equals("/audio") -> serveAudioStream(session)
-            uri.equals("/stream") -> serveFullStream(session)
-            uri.equals("/status") -> serveStatusPage(session)
-            uri.equals("/api/status") -> serveStatusJson(session)
-            uri.contains("/assets/") -> serveAsset(session)
-            else -> newFixedLengthResponse(
-                Response.Status.NOT_FOUND,
-                MIME_HTML,
-                "<html><body><h1>404 Not Found</h1><p>The requested resource was not found.</p></body></html>"
+    /**
+     * Update the current frame being streamed
+     */
+    fun updateFrame(jpegData: ByteArray) {
+        currentFrame.set(jpegData)
+    }
+
+    /**
+     * Update the current audio data being streamed
+     */
+    fun updateAudioData(audioData: ByteArray) {
+        currentAudioData.set(audioData)
+    }
+
+    /**
+     * Set callback for client connection events
+     */
+    fun setOnClientConnectedListener(listener: (Int) -> Unit) {
+        onClientConnected = listener
+    }
+
+    /**
+     * Set callback for client disconnection events
+     */
+    fun setOnClientDisconnectedListener(listener: (Int) -> Unit) {
+        onClientDisconnected = listener
+    }
+
+    /**
+     * Get the current number of connected clients
+     */
+    fun getConnectedClientCount(): Int {
+        return connectedClients.get()
+    }
+
+    override fun serve(session: IHTTPSession): Response {
+        try {
+            val uri = session.uri
+            Log.d(TAG, "Received request: $uri")
+
+            return when (uri) {
+                "/" -> serveIndexPage(session)
+                "/stream" -> serveFullStream(session)
+                "/video" -> serveVideoStream(session)
+                "/audio" -> serveAudioStream(session)
+                "/image" -> serveImageSnapshot(session)
+                "/snapshot" -> serveImageSnapshot(session)
+                "/info" -> serveDeviceInfo(session)
+                else -> serveStaticContent(session)
+            }
+        } catch (e: Exception) {
+            ErrorHandler.handleException(context, TAG, "Error serving HTTP request", e)
+            return newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                MIME_PLAINTEXT,
+                "Server Error: ${e.message}"
             )
         }
     }
 
     /**
-     * Serve the index page with controls
+     * Serve the main index HTML page
      */
     private fun serveIndexPage(session: IHTTPSession): Response {
-        val indexHtml = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>ARCast - Camera Stream</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f7f7f7; color: #333; }
-                    h1 { color: #2c3e50; text-align: center; }
-                    .container { max-width: 900px; margin: 0 auto; }
-                    .stream-container { width: 100%; background: #000; position: relative; border-radius: 8px; overflow: hidden; }
-                    .stream-image { width: 100%; display: block; }
-                    .control-panel { background: white; padding: 15px; margin-top: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-                    .btn { background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin: 5px; }
-                    .btn:hover { background: #2980b9; }
-                    .mode-select { padding: 10px; margin: 10px 0; }
-                    .status { background: #e74c3c; color: white; padding: 10px; border-radius: 4px; text-align: center; margin-bottom: 15px; }
-                    .status.connected { background: #2ecc71; }
-                    .section { margin-bottom: 15px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>ARCast Camera Stream</h1>
-                    
-                    <div id="status" class="status">Connecting...</div>
-                    
-                    <div class="stream-container">
-                        <img id="streamImage" class="stream-image" src="video" alt="Camera Stream">
-                    </div>
-                    
-                    <div class="control-panel">
-                        <div class="section">
-                            <h3>Stream Controls</h3>
-                            <button id="captureButton" class="btn">Capture Snapshot</button>
-                            <button id="audioToggleButton" class="btn">Toggle Audio</button>
-                            <select id="modeSelect" class="mode-select">
-                                <option value="image">Image Only</option>
-                                <option value="video" selected>Video Only</option>
-                                <option value="audio">Audio Only</option>
-                                <option value="stream">Video + Audio</option>
-                            </select>
-                        </div>
-                        
-                        <div class="section">
-                            <h3>Camera Controls</h3>
-                            <button id="switchCameraButton" class="btn">Switch Camera</button>
-                            <button id="flashButton" class="btn">Toggle Flash</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <script>
-                    // Connect to stream
-                    document.addEventListener('DOMContentLoaded', function() {
-                        // Update UI based on connection
-                        const statusElement = document.getElementById('status');
-                        statusElement.innerText = 'Connected';
-                        statusElement.classList.add('connected');
-                        
-                        // Set up button actions
-                        document.getElementById('captureButton').addEventListener('click', function() {
-                            window.open('/image', '_blank');
-                        });
-                        
-                        // Mode selection
-                        document.getElementById('modeSelect').addEventListener('change', function(e) {
-                            const mode = e.target.value;
-                            const streamImage = document.getElementById('streamImage');
-                            streamImage.src = mode;
-                        });
-                        
-                        // Fetch status periodically
-                        setInterval(function() {
-                            fetch('/api/status')
-                            .then(response => response.json())
-                            .then(data => {
-                                console.log(data);
-                                // Update UI with status info
-                            })
-                            .catch(err => console.error('Error fetching status:', err));
-                        }, 5000);
-                    });
-                </script>
-            </body>
-            </html>
-        """.trimIndent()
-
-        return newFixedLengthResponse(indexHtml)
-    }
-
-    /**
-     * Serve a still image snapshot
-     */
-    private fun serveImageSnapshot(session: IHTTPSession): Response {
-        val imageData = latestFrame ?: ByteArray(0)
-
-        return if (imageData.isNotEmpty()) {
-            newFixedLengthResponse(Response.Status.OK, MIME_JPEG, ByteArrayInputStream(imageData), imageData.size.toLong())
-        } else {
-            newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_HTML, "No image available")
+        try {
+            val htmlContent = generateHtmlContent()
+            return newFixedLengthResponse(Response.Status.OK, MIME_HTML, htmlContent)
+        } catch (e: Exception) {
+            ErrorHandler.handleException(context, TAG, "Error serving index page", e)
+            return newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                MIME_PLAINTEXT,
+                "Server Error: ${e.message}"
+            )
         }
     }
 
     /**
-     * Serve video stream (MJPEG)
+     * Generate HTML content based on current streaming mode
+     */
+    private fun generateHtmlContent(): String {
+        val modeSpecificContent = when (streamingMode) {
+            StreamingMode.IMAGE_ONLY -> """
+                <h3>Image Only Mode</h3>
+                <div class="streamContainer">
+                    <img id="imageSnapshot" src="/image" alt="Latest Image" />
+                    <div class="controls">
+                        <button onclick="refreshImage()">Refresh Image</button>
+                    </div>
+                </div>
+                <script>
+                    function refreshImage() {
+                        const img = document.getElementById('imageSnapshot');
+                        img.src = '/image?' + new Date().getTime();
+                    }
+                    
+                    // Auto refresh every 5 seconds
+                    setInterval(refreshImage, 5000);
+                </script>
+            """.trimIndent()
+
+            StreamingMode.AUDIO_ONLY -> """
+                <h3>Audio Only Mode</h3>
+                <div class="streamContainer">
+                    <div class="audioIndicator">
+                        <div class="audioWave"></div>
+                        <p>Audio Streaming Active</p>
+                    </div>
+                    <div class="controls">
+                        <button id="audioToggle" onclick="toggleAudio()">Pause Audio</button>
+                    </div>
+                </div>
+                <script>
+                    // Audio playback would need to be implemented
+                    // This is just a placeholder UI
+                    let audioPlaying = true;
+                    
+                    function toggleAudio() {
+                        audioPlaying = !audioPlaying;
+                        const btn = document.getElementById('audioToggle');
+                        btn.textContent = audioPlaying ? 'Pause Audio' : 'Resume Audio';
+                        
+                        const indicator = document.querySelector('.audioWave');
+                        indicator.style.animationPlayState = audioPlaying ? 'running' : 'paused';
+                    }
+                </script>
+                <style>
+                    .audioIndicator {
+                        text-align: center;
+                        padding: 20px;
+                        background-color: #222;
+                        border-radius: 10px;
+                        margin-bottom: 20px;
+                    }
+                    .audioWave {
+                        height: 60px;
+                        background: linear-gradient(#4CAF50, #4CAF50) center/2px 60% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 10%/2px 80% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 20%/2px 40% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 30%/2px 70% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 40%/2px 90% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 50%/2px 60% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 60%/2px 100% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 70%/2px 70% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 80%/2px 50% no-repeat,
+                                    linear-gradient(#4CAF50, #4CAF50) 90%/2px 60% no-repeat;
+                        animation: wave 1s infinite;
+                    }
+                    @keyframes wave {
+                        0% { opacity: 0.5; }
+                        50% { opacity: 1; }
+                        100% { opacity: 0.5; }
+                    }
+                </style>
+            """.trimIndent()
+
+            StreamingMode.VIDEO_ONLY -> """
+                <h3>Video Only Mode</h3>
+                <div class="streamContainer">
+                    <img id="streamImage" src="/video" alt="Video Stream" />
+                    <div class="controls">
+                        <button onclick="takeSnapshot()">Take Snapshot</button>
+                    </div>
+                </div>
+            """.trimIndent()
+
+            StreamingMode.VIDEO_AUDIO -> """
+                <h3>Video &amp; Audio Mode</h3>
+                <div class="streamContainer">
+                    <img id="streamImage" src="/stream" alt="Full Stream" />
+                    <div class="audioControls">
+                        <button id="muteButton" onclick="toggleMute()">Mute Audio</button>
+                        <input type="range" id="volumeSlider" min="0" max="100" value="80" oninput="changeVolume(this.value)" />
+                    </div>
+                    <div class="controls">
+                        <button onclick="takeSnapshot()">Take Snapshot</button>
+                    </div>
+                </div>
+                <script>
+                    let audioMuted = false;
+                    
+                    function toggleMute() {
+                        audioMuted = !audioMuted;
+                        const btn = document.getElementById('muteButton');
+                        btn.textContent = audioMuted ? 'Unmute Audio' : 'Mute Audio';
+                        
+                        // In a real implementation, this would control an audio element
+                    }
+                    
+                    function changeVolume(value) {
+                        console.log('Volume set to: ' + value);
+                        // In a real implementation, this would set the volume of an audio element
+                    }
+                </script>
+            """.trimIndent()
+        }
+
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>ARCast Stream</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 0;
+                        padding: 0;
+                        display: flex;
+                        flex-direction: column;
+                        height: 100vh;
+                        background-color: #121212;
+                        color: #FFFFFF;
+                    }
+                    .header {
+                        padding: 10px;
+                        background-color: #333;
+                        text-align: center;
+                    }
+                    .content {
+                        flex: 1;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        padding: 10px;
+                    }
+                    .footer {
+                        padding: 10px;
+                        background-color: #333;
+                        text-align: center;
+                        font-size: 0.8em;
+                    }
+                    .streamContainer {
+                        text-align: center;
+                        max-width: 100%;
+                    }
+                    #streamImage, #imageSnapshot {
+                        max-width: 100%;
+                        height: auto;
+                        border: 1px solid #444;
+                    }
+                    .controls, .audioControls {
+                        margin-top: 10px;
+                        display: flex;
+                        justify-content: center;
+                        gap: 10px;
+                        padding: 10px;
+                    }
+                    button {
+                        padding: 8px 16px;
+                        background-color: #4CAF50;
+                        border: none;
+                        color: white;
+                        border-radius: 4px;
+                        cursor: pointer;
+                    }
+                    button:hover {
+                        background-color: #45a049;
+                    }
+                    input[type=range] {
+                        width: 150px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>ARCast Stream</h1>
+                </div>
+                <div class="content">
+                    $modeSpecificContent
+                </div>
+                <div class="footer">
+                    <p>ARCast - Augmented Reality Camera Streaming</p>
+                </div>
+                
+                <script>
+                    function takeSnapshot() {
+                        window.open('/snapshot', '_blank');
+                    }
+                    
+                    function showInfo() {
+                        fetch('/info')
+                            .then(response => response.json())
+                            .then(data => {
+                                alert('Device Info:\\nModel: ' + data.model + 
+                                      '\\nResolution: ' + data.resolution +
+                                      '\\nConnected Clients: ' + data.clients);
+                            })
+                            .catch(error => {
+                                alert('Error fetching device info');
+                            });
+                    }
+                </script>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
+    /**
+     * Serve a full stream (video + audio)
+     */
+    private fun serveFullStream(session: IHTTPSession): Response {
+        // For now, just serve video
+        // In a real implementation, this would use a more sophisticated
+        // method to stream synchronized audio and video
+        return serveVideoStream(session)
+    }
+
+    /**
+     * Serve a MJPEG video stream
      */
     private fun serveVideoStream(session: IHTTPSession): Response {
-        val clientId = session.remoteHostName + ":" + session.remoteIpAddress
-
         // Increment connected client count
-        connectedClients.incrementAndGet()
+        val count = connectedClients.incrementAndGet()
+        onClientConnected?.invoke(count)
 
-        Log.i(TAG, "Client connected to video stream: $clientId, total clients: ${connectedClients.get()}")
-
-        // Create a queue for this client
-        val queue = LinkedBlockingQueue<ByteArray>(10) // Buffer up to 10 frames
-        clientQueues[clientId] = queue
-
-        // Create piped streams for MJPEG streaming
-        val pipedOutputStream = PipedOutputStream()
-        val pipedInputStream = PipedInputStream(pipedOutputStream)
-
-        val response = newChunkedResponse(Response.Status.OK, MIME_MJPEG, pipedInputStream)
-
-        // Use a thread to send frames to this client
-        Thread {
-            try {
-                // Send MJPEG header
-                pipedOutputStream.write("--frame\r\n".toByteArray())
-
-                while (!response.isCloseConnection) {
-                    // Wait for next frame
-                    val frame = queue.take()
-
-                    try {
-                        // Write MJPEG part header
-                        pipedOutputStream.write("Content-Type: image/jpeg\r\n".toByteArray())
-                        pipedOutputStream.write("Content-Length: ${frame.size}\r\n\r\n".toByteArray())
-                        pipedOutputStream.write(frame)
-                        pipedOutputStream.write("\r\n--frame\r\n".toByteArray())
-                        pipedOutputStream.flush()
-                    } catch (e: IOException) {
-                        Log.w(TAG, "Error sending frame to client: $clientId", e)
-                        break
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error in streaming thread for client: $clientId", e)
-            } finally {
-                // Clean up when client disconnects
-                try {
-                    pipedOutputStream.close()
-                } catch (e: IOException) {
-                    Log.e(TAG, "Error closing stream", e)
-                }
-
-                clientQueues.remove(clientId)
-                connectedClients.decrementAndGet()
-                Log.i(TAG, "Client disconnected from video stream: $clientId, total clients: ${connectedClients.get()}")
-            }
-        }.start()
+        // Create a chunked response for streaming
+        val response = newChunkedResponse(
+            Response.Status.OK,
+            MIME_MJPEG,
+            createMjpegStream()
+        )
 
         return response
     }
 
     /**
-     * Serve audio stream
+     * Create an input stream that outputs MJPEG data
      */
-    private fun serveAudioStream(session: IHTTPSession): Response {
-        // This is a placeholder for audio streaming
-        // Would need to implement audio recording and WebSocket or other streaming method
-        return newFixedLengthResponse(
-            Response.Status.NOT_IMPLEMENTED,
-            MIME_HTML,
-            "<html><body><h1>Audio Streaming</h1><p>Audio streaming not implemented yet.</p></body></html>"
-        )
-    }
+    private fun createMjpegStream(): InputStream {
+        return object : InputStream() {
+            private var closed = false
+            private var isHeaderSent = false
+            private var currentFrameData: ByteArray? = null
+            private var currentPosition = 0
 
-    /**
-     * Serve full stream (video + audio)
-     */
-    private fun serveFullStream(session: IHTTPSession): Response {
-        // For combined streams, we'd use WebRTC or similar
-        // For now, just serve the video stream
-        return serveVideoStream(session)
-    }
-
-    /**
-     * Serve status page
-     */
-    private fun serveStatusPage(session: IHTTPSession): Response {
-        val statusHtml = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>ARCast - Status</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f7f7f7; color: #333; }
-                    h1 { color: #2c3e50; text-align: center; }
-                    .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-                    .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
-                    .label { font-weight: bold; }
-                    .value { color: #3498db; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>Server Status</h1>
-                    
-                    <div class="info-row">
-                        <span class="label">Status:</span>
-                        <span class="value">Running</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="label">Connected Clients:</span>
-                        <span class="value">${connectedClients.get()}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="label">Streaming Mode:</span>
-                        <span class="value">${streamingMode.name}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="label">Stream Quality:</span>
-                        <span class="value">${streamQuality.name}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="label">Protocol:</span>
-                        <span class="value">${streamProtocol.name}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="label">Available Endpoints:</span>
-                        <span class="value">/image, /video, /audio, /stream</span>
-                    </div>
-                </div>
-            </body>
-            </html>
-        """.trimIndent()
-
-        return newFixedLengthResponse(statusHtml)
-    }
-
-    /**
-     * Serve status as JSON for API clients
-     */
-    private fun serveStatusJson(session: IHTTPSession): Response {
-        val statusJson = """
-            {
-                "status": "running",
-                "connectedClients": ${connectedClients.get()},
-                "streamingMode": "${streamingMode.name}",
-                "streamQuality": "${streamQuality.name}",
-                "protocol": "${streamProtocol.name}",
-                "endpoints": ["/image", "/video", "/audio", "/stream"]
+            private fun updateCurrentFrame() {
+                currentFrameData = currentFrame.get()
+                currentPosition = 0
             }
-        """.trimIndent()
 
-        return newFixedLengthResponse(Response.Status.OK, "application/json", statusJson)
-    }
+            override fun read(): Int {
+                if (closed) return -1
 
-    /**
-     * Serve static assets (CSS, JS, etc.)
-     */
-    private fun serveAsset(session: IHTTPSession): Response {
-        val uri = session.uri.removePrefix("/assets/")
+                try {
+                    if (!isHeaderSent) {
+                        // Send MJPEG header
+                        val header = "--$MJPEG_BOUNDARY\r\nContent-Type: $MIME_JPEG\r\n\r\n"
+                        val headerBytes = header.toByteArray()
 
-        try {
-            val inputStream = context.assets.open(uri)
-            val mimeType = getMimeType(uri)
+                        if (currentPosition < headerBytes.size) {
+                            return headerBytes[currentPosition++].toInt() and 0xFF
+                        } else {
+                            isHeaderSent = true
+                            updateCurrentFrame()
+                            currentPosition = 0
+                        }
+                    }
 
-            return newChunkedResponse(Response.Status.OK, mimeType, inputStream)
-        } catch (e: IOException) {
-            Log.e(TAG, "Error serving asset: $uri", e)
-            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_HTML, "Asset not found")
-        }
-    }
+                    val frame = currentFrameData
+                    if (frame != null && currentPosition < frame.size) {
+                        return frame[currentPosition++].toInt() and 0xFF
+                    } else {
+                        // Send frame boundary
+                        val boundary = "\r\n--$MJPEG_BOUNDARY\r\nContent-Type: $MIME_JPEG\r\n\r\n"
+                        val boundaryBytes = boundary.toByteArray()
 
-    /**
-     * Get MIME type based on file extension
-     */
-    private fun getMimeType(filename: String): String {
-        return when {
-            filename.endsWith(".html") -> "text/html"
-            filename.endsWith(".css") -> "text/css"
-            filename.endsWith(".js") -> "application/javascript"
-            filename.endsWith(".jpg") -> "image/jpeg"
-            filename.endsWith(".png") -> "image/png"
-            filename.endsWith(".svg") -> "image/svg+xml"
-            else -> "application/octet-stream"
-        }
-    }
+                        if (currentPosition < (frame?.size ?: 0) + boundaryBytes.size) {
+                            val adjustedPos = currentPosition - (frame?.size ?: 0)
+                            if (adjustedPos >= 0 && adjustedPos < boundaryBytes.size) {
+                                return boundaryBytes[adjustedPos].toInt() and 0xFF
+                            }
+                        }
 
-    /**
-     * Process new frame from camera
-     */
-    fun updateFrame(data: ByteArray?, width: Int, height: Int, format: Int) {
-        if (data == null || !streamingEnabled.get()) return
+                        // Reset for next frame
+                        isHeaderSent = false
+                        currentPosition = 0
 
-        try {
-            // Convert to JPEG for streaming
-            val jpegData = convertToJpeg(data, width, height, format, streamQuality.jpegQuality)
+                        // Small delay to control frame rate
+                        Thread.sleep(33) // ~30fps
 
-            // Update latest frame
-            latestFrame = jpegData
-
-            // Send to all connected clients
-            for (queue in clientQueues.values) {
-                // Non-blocking update to prevent slow clients from affecting others
-                // If queue is full, we drop this frame for that client
-                if (!queue.offer(jpegData)) {
-                    Log.v(TAG, "Dropping frame for slow client")
+                        // Return recursive call to start next frame
+                        return read()
+                    }
+                } catch (e: Exception) {
+                    ErrorHandler.handleException(context, TAG, "Error streaming MJPEG", e)
+                    closed = true
+                    // Decrement connected client count
+                    val newCount = connectedClients.decrementAndGet()
+                    onClientDisconnected?.invoke(newCount)
+                    return -1
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error processing frame", e)
-        }
-    }
 
-    /**
-     * Convert camera data to JPEG
-     */
-    private fun convertToJpeg(data: ByteArray, width: Int, height: Int, format: Int, quality: Int): ByteArray {
-        if (format == ImageFormat.NV21 || format == ImageFormat.YUV_420_888) {
-            val yuvImage = YuvImage(data, format, width, height, null)
-            val jpegStream = ByteArrayOutputStream()
-
-            if (yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, jpegStream)) {
-                return jpegStream.toByteArray()
+            override fun close() {
+                if (!closed) {
+                    closed = true
+                    // Decrement connected client count
+                    val newCount = connectedClients.decrementAndGet()
+                    onClientDisconnected?.invoke(newCount)
+                }
+                super.close()
             }
-        } else {
-            // For other formats like JPEG, we might not need conversion
-            // This depends on what format is being used by the camera
         }
-
-        // Fallback: just return the original data
-        return data
     }
 
     /**
-     * Start streaming
+     * Serve an audio stream
      */
-    fun startStreaming(mode: StreamingMode, quality: StreamQuality, protocol: StreamProtocol) {
-        streamingMode = mode
-        streamQuality = quality
-        streamProtocol = protocol
-        streamingEnabled.set(true)
-        Log.i(TAG, "Streaming started with mode: $mode, quality: $quality, protocol: $protocol")
+    private fun serveAudioStream(session: IHTTPSession): Response {
+        // Increment connected client count
+        val count = connectedClients.incrementAndGet()
+        onClientConnected?.invoke(count)
+
+        // Create a chunked response for streaming
+        val response = newChunkedResponse(
+            Response.Status.OK,
+            MIME_AUDIO_STREAM,
+            createAudioStream()
+        )
+
+        return response
     }
 
     /**
-     * Stop streaming
+     * Create an input stream that outputs audio data
      */
-    fun stopStreaming() {
-        streamingEnabled.set(false)
-        Log.i(TAG, "Streaming stopped")
+    private fun createAudioStream(): InputStream {
+        return object : InputStream() {
+            private var closed = false
+            private var isHeaderSent = false
+            private var currentAudioChunk: ByteArray? = null
+            private var currentPosition = 0
+
+            private fun updateCurrentAudio() {
+                currentAudioChunk = currentAudioData.get()
+                currentPosition = 0
+            }
+
+            override fun read(): Int {
+                if (closed) return -1
+
+                try {
+                    if (!isHeaderSent) {
+                        // Send audio boundary header
+                        val header = "--$AUDIO_BOUNDARY\r\nContent-Type: $MIME_AUDIO_PCM\r\n\r\n"
+                        val headerBytes = header.toByteArray()
+
+                        if (currentPosition < headerBytes.size) {
+                            return headerBytes[currentPosition++].toInt() and 0xFF
+                        } else {
+                            isHeaderSent = true
+                            updateCurrentAudio()
+                            currentPosition = 0
+                        }
+                    }
+
+                    val audio = currentAudioChunk
+                    if (audio != null && audio.isNotEmpty() && currentPosition < audio.size) {
+                        return audio[currentPosition++].toInt() and 0xFF
+                    } else {
+                        // Send chunk boundary
+                        val boundary = "\r\n--$AUDIO_BOUNDARY\r\nContent-Type: $MIME_AUDIO_PCM\r\n\r\n"
+                        val boundaryBytes = boundary.toByteArray()
+
+                        if (currentPosition < (audio?.size ?: 0) + boundaryBytes.size) {
+                            val adjustedPos = currentPosition - (audio?.size ?: 0)
+                            if (adjustedPos >= 0 && adjustedPos < boundaryBytes.size) {
+                                return boundaryBytes[adjustedPos].toInt() and 0xFF
+                            }
+                        }
+
+                        // Reset for next chunk
+                        isHeaderSent = false
+                        currentPosition = 0
+
+                        // Small delay
+                        Thread.sleep(20)
+
+                        // Return recursive call to start next chunk
+                        return read()
+                    }
+                } catch (e: Exception) {
+                    ErrorHandler.handleException(context, TAG, "Error streaming audio", e)
+                    closed = true
+                    // Decrement connected client count
+                    val newCount = connectedClients.decrementAndGet()
+                    onClientDisconnected?.invoke(newCount)
+                    return -1
+                }
+            }
+
+            override fun close() {
+                if (!closed) {
+                    closed = true
+                    // Decrement connected client count
+                    val newCount = connectedClients.decrementAndGet()
+                    onClientDisconnected?.invoke(newCount)
+                }
+                super.close()
+            }
+        }
     }
 
     /**
-     * Get connected clients count
+     * Serve a single JPEG snapshot
      */
-    fun getConnectedClientsCount(): Int {
-        return connectedClients.get()
+    private fun serveImageSnapshot(session: IHTTPSession): Response {
+        try {
+            val frame = currentFrame.get()
+            return if (frame != null) {
+                newFixedLengthResponse(
+                    Response.Status.OK,
+                    MIME_JPEG,
+                    ByteArrayInputStream(frame),
+                    frame.size.toLong()
+                )
+            } else {
+                newFixedLengthResponse(
+                    Response.Status.NOT_FOUND,
+                    MIME_PLAINTEXT,
+                    "No image available"
+                )
+            }
+        } catch (e: Exception) {
+            ErrorHandler.handleException(context, TAG, "Error serving snapshot", e)
+            return newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                MIME_PLAINTEXT,
+                "Server Error: ${e.message}"
+            )
+        }
     }
 
     /**
-     * Check if streaming is active
+     * Serve device information as JSON
      */
-    fun isStreaming(): Boolean {
-        return streamingEnabled.get()
+    private fun serveDeviceInfo(session: IHTTPSession): Response {
+        try {
+            val info = """
+                {
+                    "model": "${android.os.Build.MODEL}",
+                    "resolution": "1280x720",
+                    "clients": ${connectedClients.get()},
+                    "mode": "${streamingMode.name}"
+                }
+            """.trimIndent()
+
+            return newFixedLengthResponse(
+                Response.Status.OK,
+                MIME_JSON,
+                info
+            )
+        } catch (e: Exception) {
+            ErrorHandler.handleException(context, TAG, "Error serving device info", e)
+            return newFixedLengthResponse(
+                Response.Status.INTERNAL_ERROR,
+                MIME_PLAINTEXT,
+                "Server Error: ${e.message}"
+            )
+        }
+    }
+
+    /**
+     * Serve static content
+     */
+    private fun serveStaticContent(session: IHTTPSession): Response {
+        return newFixedLengthResponse(
+            Response.Status.NOT_FOUND,
+            MIME_PLAINTEXT,
+            "Not found: ${session.uri}"
+        )
     }
 }

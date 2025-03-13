@@ -2,10 +2,8 @@
 <androidx.core.widget.NestedScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".settings.SettingsFragment">
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,133 +16,86 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Streaming Settings"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:textSize="20sp"
             android:layout_marginBottom="8dp"/>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            app:cardElevation="2dp"
-            app:cardCornerRadius="8dp">
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:padding="16dp">
 
-                <!-- Protocol Selection -->
-                <LinearLayout
+                <!-- Streaming Protocol -->
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:text="Streaming Protocol"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp"/>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Streaming Protocol"
-                            android:textSize="16sp"/>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Select preferred streaming protocol"
-                            android:textSize="14sp"
-                            android:textColor="#757575"/>
-                    </LinearLayout>
-
-                    <Spinner
-                        android:id="@+id/spinner_protocol"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minWidth="120dp"/>
-                </LinearLayout>
-
-                <View
+                <Spinner
+                    android:id="@+id/spinner_protocol"
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#E0E0E0"/>
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"/>
 
                 <!-- Server Port -->
-                <LinearLayout
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:text="Server Port"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp"/>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Server Port"
-                            android:textSize="16sp"/>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Select port for streaming server"
-                            android:textSize="14sp"
-                            android:textColor="#757575"/>
-                    </LinearLayout>
-
-                    <Spinner
-                        android:id="@+id/spinner_port"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minWidth="120dp"/>
-                </LinearLayout>
-
-                <View
+                <Spinner
+                    android:id="@+id/spinner_port"
                     android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#E0E0E0"/>
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"/>
 
                 <!-- Default Quality -->
-                <LinearLayout
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:text="Default Stream Quality"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp"/>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
+                <RadioGroup
+                    android:id="@+id/radio_group_quality"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/radio_quality_low"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:text="Low (480p)"/>
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Default Stream Quality"
-                            android:textSize="16sp"/>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Select default streaming quality"
-                            android:textSize="14sp"
-                            android:textColor="#757575"/>
-                    </LinearLayout>
-
-                    <Spinner
-                        android:id="@+id/spinner_default_quality"
-                        android:layout_width="wrap_content"
+                    <RadioButton
+                        android:id="@+id/radio_quality_medium"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:minWidth="120dp"/>
-                </LinearLayout>
+                        android:text="Medium (720p)"
+                        android:checked="true"/>
+
+                    <RadioButton
+                        android:id="@+id/radio_quality_high"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="High (1080p)"/>
+                </RadioGroup>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -153,28 +104,30 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Camera Settings"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:textSize="20sp"
             android:layout_marginBottom="8dp"/>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            app:cardElevation="2dp"
-            app:cardCornerRadius="8dp">
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:padding="16dp">
 
-                <!-- Flash Setting -->
+                <!-- Flash -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -191,28 +144,24 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Enable flash when streaming"
+                            android:text="Enable camera flash"
                             android:textSize="14sp"
                             android:textColor="#757575"/>
                     </LinearLayout>
 
-                    <Switch
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switch_flash"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"/>
                 </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#E0E0E0"/>
 
                 <!-- Auto Focus -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -234,50 +183,40 @@
                             android:textColor="#757575"/>
                     </LinearLayout>
 
-                    <Switch
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switch_autofocus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:checked="true"/>
                 </LinearLayout>
 
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="#E0E0E0"/>
-
                 <!-- Default Camera -->
-                <LinearLayout
+                <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:text="Default Camera"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp"/>
 
-                    <LinearLayout
-                        android:layout_width="0dp"
+                <RadioGroup
+                    android:id="@+id/radio_group_camera"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RadioButton
+                        android:id="@+id/radio_camera_rear"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:text="Rear Camera"
+                        android:checked="true"/>
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Use Front Camera"
-                            android:textSize="16sp"/>
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Use front camera by default"
-                            android:textSize="14sp"
-                            android:textColor="#757575"/>
-                    </LinearLayout>
-
-                    <Switch
-                        android:id="@+id/switch_front_camera"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"/>
-                </LinearLayout>
+                    <RadioButton
+                        android:id="@+id/radio_camera_front"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Front Camera"/>
+                </RadioGroup>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -286,28 +225,30 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="App Settings"
+            android:textSize="18sp"
             android:textStyle="bold"
-            android:textSize="20sp"
             android:layout_marginBottom="8dp"/>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            app:cardElevation="2dp"
-            app:cardCornerRadius="8dp">
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:padding="16dp">
 
                 <!-- Dark Theme -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:padding="16dp">
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
@@ -324,67 +265,24 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Enable dark theme for the app"
+                            android:text="Use dark theme for the app"
                             android:textSize="14sp"
                             android:textColor="#757575"/>
                     </LinearLayout>
 
-                    <Switch
+                    <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switch_dark_theme"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"/>
                 </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- About Section -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="About"
-            android:textStyle="bold"
-            android:textSize="20sp"
-            android:layout_marginBottom="8dp"/>
-
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/card_about"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardElevation="2dp"
-            app:cardCornerRadius="8dp"
-            android:foreground="?attr/selectableItemBackground"
-            android:clickable="true"
-            android:focusable="true">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
+                <!-- About Button -->
+                <Button
+                    android:id="@+id/button_about"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="ARCast"
-                    android:textSize="18sp"
-                    android:textStyle="bold"/>
-
-                <TextView
-                    android:id="@+id/text_version"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Version 1.0.0"
-                    android:textSize="14sp"
-                    android:layout_marginTop="4dp"/>
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Tap for more information"
-                    android:textStyle="italic"
-                    android:textSize="14sp"
-                    android:textColor="#757575"
-                    android:layout_marginTop="8dp"/>
+                    android:text="About ARCast"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

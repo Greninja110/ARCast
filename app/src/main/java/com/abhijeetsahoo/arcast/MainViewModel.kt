@@ -1,152 +1,114 @@
 package com.abhijeetsahoo.arcast
 
-import android.util.Log
+import android.content.Context
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.abhijeetsahoo.arcast.streaming.StreamProtocol
-import com.abhijeetsahoo.arcast.streaming.StreamQuality
 import com.abhijeetsahoo.arcast.streaming.StreamingMode
-import com.abhijeetsahoo.arcast.streaming.StreamingServiceState
+import com.abhijeetsahoo.arcast.streaming.StreamQuality
+import com.abhijeetsahoo.arcast.streaming.StreamProtocol
+import com.abhijeetsahoo.arcast.utils.NetworkUtils
 import kotlinx.coroutines.launch
 
 /**
- * ViewModel for the main activity, maintaining app state and handling logic
+ * ViewModel for the main activity to handle application state
  */
 class MainViewModel : ViewModel() {
-    companion object {
-        private const val TAG = "MainViewModel"
-    }
 
-    // App state
     private val _appState = MutableLiveData<AppState>()
     val appState: LiveData<AppState> = _appState
 
+    // Streaming settings
+    private val _streamingMode = MutableLiveData(StreamingMode.VIDEO_ONLY)
+    val streamingMode: LiveData<StreamingMode> = _streamingMode
+
+    private val _streamQuality = MutableLiveData(StreamQuality.MEDIUM)
+    val streamQuality: LiveData<StreamQuality> = _streamQuality
+
+    private val _streamProtocol = MutableLiveData(StreamProtocol.HTTP)
+    val streamProtocol: LiveData<StreamProtocol> = _streamProtocol
+
+    // Streaming state
+    private val _isStreaming = MutableLiveData(false)
+    val isStreaming: LiveData<Boolean> = _isStreaming
+
+    private val _connectedClients = MutableLiveData(0)
+    val connectedClients: LiveData<Int> = _connectedClients
+
+    private val _streamUrl = MutableLiveData<String?>(null)
+    val streamUrl: LiveData<String?> = _streamUrl
+
     init {
-        // Initialize app state with defaults
+        // Initialize app state
         _appState.value = AppState()
     }
 
     /**
-     * Update the app state
+     * Check required permissions for app functionality
      */
-    private fun updateState(update: (AppState) -> AppState) {
-        _appState.value = _appState.value?.let(update)
+    fun checkRequiredPermissions() {
+        viewModelScope.launch {
+            // Check permissions logic would go here
+        }
     }
 
     /**
-     * Set the streaming mode
+     * Update streaming mode
      */
     fun setStreamingMode(mode: StreamingMode) {
-        updateState { it.copy(streamingMode = mode) }
-        Log.d(TAG, "Streaming mode set to: $mode")
+        _streamingMode.value = mode
     }
 
     /**
-     * Set the streaming quality
+     * Update streaming quality
      */
     fun setStreamQuality(quality: StreamQuality) {
-        updateState { it.copy(streamQuality = quality) }
-        Log.d(TAG, "Stream quality set to: $quality")
+        _streamQuality.value = quality
     }
 
     /**
-     * Set the streaming protocol
+     * Update streaming protocol
      */
     fun setStreamProtocol(protocol: StreamProtocol) {
-        updateState { it.copy(streamProtocol = protocol) }
-        Log.d(TAG, "Stream protocol set to: $protocol")
+        _streamProtocol.value = protocol
     }
 
     /**
-     * Start streaming
+     * Update streaming state
      */
-    fun startStreaming() {
-        viewModelScope.launch {
-            updateState { it.copy(isStreaming = true) }
-            Log.d(TAG, "Streaming started")
-        }
+    fun setStreamingState(isStreaming: Boolean) {
+        _isStreaming.value = isStreaming
     }
 
     /**
-     * Stop streaming
+     * Update connected clients count
      */
-    fun stopStreaming() {
-        viewModelScope.launch {
-            updateState { it.copy(isStreaming = false) }
-            Log.d(TAG, "Streaming stopped")
-        }
+    fun setConnectedClients(count: Int) {
+        _connectedClients.value = count
     }
 
     /**
-     * Update state from streaming service
+     * Update stream URL
      */
-    fun updateStreamingState(serviceState: StreamingServiceState) {
-        updateState {
-            it.copy(
-                isStreaming = serviceState.isStreaming,
-                streamingMode = serviceState.streamingMode,
-                streamQuality = serviceState.streamQuality,
-                streamProtocol = serviceState.streamProtocol,
-                connectedClients = serviceState.connectedClients,
-                ipAddress = serviceState.localIpAddress,
-                streamUrls = serviceState.streamUrls
-            )
-        }
+    fun setStreamUrl(url: String?) {
+        _streamUrl.value = url
     }
 
     /**
-     * Set camera settings
+     * Get IP address from network utilities
      */
-    fun setCameraSettings(useFlash: Boolean, useFrontCamera: Boolean, autoFocus: Boolean) {
-        updateState {
-            it.copy(
-                useFlash = useFlash,
-                useFrontCamera = useFrontCamera,
-                autoFocus = autoFocus
-            )
-        }
-    }
-
-    /**
-     * Switch between light and dark theme
-     */
-    fun setDarkTheme(useDarkTheme: Boolean) {
-        updateState { it.copy(useDarkTheme = useDarkTheme) }
-    }
-
-    /**
-     * Set server port
-     */
-    fun setServerPort(port: Int) {
-        updateState { it.copy(serverPort = port) }
+    fun getDeviceIpAddress(context: Context): String? {
+        return NetworkUtils.getWifiIPAddress(context)
     }
 }
 
 /**
- * App state data class
+ * Data class representing the app state
  */
 data class AppState(
-    // Camera state
     val isCameraReady: Boolean = false,
-    val useFrontCamera: Boolean = false,
-    val useFlash: Boolean = false,
-    val autoFocus: Boolean = true,
-
-    // Streaming state
     val isStreaming: Boolean = false,
-    val streamingMode: StreamingMode = StreamingMode.VIDEO_ONLY,
-    val streamQuality: StreamQuality = StreamQuality.MEDIUM,
-    val streamProtocol: StreamProtocol = StreamProtocol.HTTP,
-    val connectedClients: Int = 0,
-    val ipAddress: String = "Not connected",
-    val streamUrls: Map<String, String> = emptyMap(),
-    val serverPort: Int = 8080,
-
-    // AR state
-    val arSessionActive: Boolean = false,
-
-    // App settings
-    val useDarkTheme: Boolean = false
+    val currentIpAddress: String = "",
+    val arSessionActive: Boolean = false
 )

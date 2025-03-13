@@ -3,16 +3,26 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_graph"
-    app:startDestination="@id/cameraFragment">
+    app:startDestination="@id/streamFragment">
 
     <fragment
-        android:id="@+id/cameraFragment"
-        android:name="com.abhijeetsahoo.arcast.camera.CameraFragment"
-        android:label="Camera"
-        tools:layout="@layout/fragment_camera">
+        android:id="@+id/streamFragment"
+        android:name="com.abhijeetsahoo.arcast.streaming.StreamFragment"
+        android:label="Stream"
+        tools:layout="@layout/fragment_stream_info">
         <action
-            android:id="@+id/action_to_settings"
-            app:destination="@id/settingsFragment" />
+            android:id="@+id/action_streamFragment_to_modeFragment"
+            app:destination="@id/modeFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/modeFragment"
+        android:name="com.abhijeetsahoo.arcast.streaming.ModeFragment"
+        android:label="Mode"
+        tools:layout="@layout/fragment_mode">
+        <action
+            android:id="@+id/action_modeFragment_to_streamFragment"
+            app:destination="@id/streamFragment" />
     </fragment>
 
     <fragment
@@ -20,11 +30,5 @@
         android:name="com.abhijeetsahoo.arcast.settings.SettingsFragment"
         android:label="Settings"
         tools:layout="@layout/fragment_settings" />
-
-    <fragment
-        android:id="@+id/streamInfoFragment"
-        android:name="com.abhijeetsahoo.arcast.streaming.StreamInfoFragment"
-        android:label="Stream Info"
-        tools:layout="@layout/fragment_stream_info" />
 
 </navigation>
