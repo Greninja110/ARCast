@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/text_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Stream Status"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:background="#EEEEEE"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView
+            android:id="@+id/text_ip_address"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="IP: Not Connected"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/text_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="URL: Not Available"
+            android:layout_marginBottom="16dp"/>
+
+        <Button
+            android:id="@+id/button_start_stream"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start Streaming"
+            android:padding="16dp"/>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
